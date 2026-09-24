@@ -137,6 +137,75 @@ Maximum file size: 50MB.`,
     }
   );
 
+  // create_file_from_url
+  server.registerTool(
+    'create_file_from_url',
+    {
+      title: 'Create File From URL',
+      description: `Download a file from a URL and attach it to a contact in Less Annoying CRM.
+Use this instead of create_file when the file lives at a reachable URL (e.g. a SharePoint
+download link or a Microsoft Graph attachment URL) rather than as base64 content or a local
+path on this server's disk.
+
+Required: contact_id, url, file_name.
+Maximum file size: 50MB.`,
+      inputSchema: {
+        contact_id: z.string().describe('Contact or company ID to attach file to'),
+        url: z.string().describe('URL to fetch the file content from'),
+        file_name: z.string().describe('Display name for the file'),
+        mime_type: z.string().optional().describe('MIME type (e.g., "application/pdf") — inferred from the response if omitted')
+      }
+    },
+    async (args) => {
+      try {
+        const client = getClient();
+
+        let response: Response;
+        try {
+          response = await fetch(args.url);
+        } catch (err) {
+          return {
+            content: [{ type: 'text' as const, text: `Error fetching URL: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+            isError: true
+          };
+        }
+
+        if (!response.ok) {
+          return {
+            content: [{ type: 'text' as const, text: `Error fetching URL: ${response.status} ${response.statusText}` }],
+            isError: true
+          };
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength > 50 * 1024 * 1024) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: file is ${arrayBuffer.byteLength} bytes, exceeds the 50MB limit` }],
+            isError: true
+          };
+        }
+
+        const fileContent = new Uint8Array(arrayBuffer);
+        const mimeType = args.mime_type || response.headers.get('content-type') || 'application/octet-stream';
+
+        const result = await client.callWithFile<{ FileId: string }>(
+          'CreateFile',
+          { ContactId: args.contact_id },
+          { name: args.file_name, content: fileContent, mimeType }
+        );
+
+        return {
+          content: [{ type: 'text' as const, text: `File uploaded successfully from URL. FileId: ${result.FileId}` }]
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: formatErrorForLLM(error) }],
+          isError: true
+        };
+      }
+    }
+  );
+
   // get_file
   server.registerTool(
     'get_file',
