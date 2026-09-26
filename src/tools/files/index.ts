@@ -205,6 +205,38 @@ Maximum file size: 50MB.`,
       }
     }
   );
+  // delete_file
+  server.registerTool(
+    'delete_file',
+    {
+      title: 'Delete File',
+      description: `Delete a file attachment from Less Annoying CRM.
+
+WARNING: this permanently removes the file. There is no undo and no trash/recycle bin.
+
+Required: file_id — the FileId returned when the file was created, or from get_files_attached_to_contact.`,
+      inputSchema: {
+        file_id: z.string().describe('FileId of the file to delete')
+      }
+    },
+    async (args) => {
+      try {
+        const client = getClient();
+
+        await client.call('DeleteFile', { FileId: args.file_id });
+
+        return {
+          content: [{ type: 'text' as const, text: `File ${args.file_id} deleted successfully.` }]
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: formatErrorForLLM(error) }],
+          isError: true
+        };
+      }
+    }
+  );
+
 
   // get_file
   server.registerTool(
